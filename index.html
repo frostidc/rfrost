@@ -12,14 +12,12 @@
 <body>
   <h1>🎨 Rclose Pixel Place</h1>
   <input type="color" id="colorPicker" value="#ff0000">
-  <canvas id="canvas" width="500" height="500"></canvas>
+  <canvas id="canvas" width="250" height="250"></canvas>
 
   <script type="module">
-    // Firebase SDK'dan modülleri import et
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
-    // Firebase konfigürasyonu
     const firebaseConfig = {
       apiKey: "AIzaSyDAJGgwGdI6ZgWaGkZfIT9WRcbBqHLUXWY",
       authDomain: "rclose-25d84.firebaseapp.com",
@@ -31,17 +29,13 @@
       databaseURL: "https://rclose-25d84-default-rtdb.firebaseio.com"
     };
 
-    // Firebase başlat
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
-    // Tuval ayarları
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
     const gridSize = 10;
-    const pixelCount = canvas.width / gridSize;
 
-    // Firebase'den pikselleri çek
     const pixelRef = ref(db, 'pixels');
     onValue(pixelRef, (snapshot) => {
       const data = snapshot.val();
@@ -54,7 +48,6 @@
       }
     });
 
-    // Tıklanınca piksel boyama
     canvas.addEventListener('click', (e) => {
       const rect = canvas.getBoundingClientRect();
       const x = Math.floor((e.clientX - rect.left) / gridSize);
