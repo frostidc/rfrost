@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>Rclose Pixel Place</title>
+  <style>
+    body { background: #111; color: #fff; text-align: center; font-family: sans-serif; }
+    canvas { border: 2px solid #fff; margin-top: 20px; image-rendering: pixelated; }
+    #colorPicker { margin-top: 15px; width: 100px; height: 30px; }
+  </style>
+</head>
+<body>
+  <h1>🎨 Rclose Pixel Place</h1>
+  <input type="color" id="colorPicker" value="#ff0000">
+  <canvas id="canvas" width="500" height="500"></canvas>
+
+  <script type="module">
+    // Firebase SDK'dan modülleri import et
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+    // Firebase konfigürasyonu
+    const firebaseConfig = {
+      apiKey: "AIzaSyDAJGgwGdI6ZgWaGkZfIT9WRcbBqHLUXWY",
+      authDomain: "rclose-25d84.firebaseapp.com",
+      projectId: "rclose-25d84",
+      storageBucket: "rclose-25d84.firebasestorage.app",
+      messagingSenderId: "697784540299",
+      appId: "1:697784540299:web:a8425786862a02459a088e",
+      measurementId: "G-ELTFR1KTWP",
+      databaseURL: "https://rclose-25d84-default-rtdb.firebaseio.com"
+    };
+
+    // Firebase başlat
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    // Tuval ayarları
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const gridSize = 10;
+    const pixelCount = canvas.width / gridSize;
+
+    // Firebase'den pikselleri çek
+    const pixelRef = ref(db, 'pixels');
+    onValue(pixelRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        for (let key in data) {
+          const [x, y] = key.split('_').map(Number);
+          ctx.fillStyle = data[key];
+          ctx.fillRect(x * gridSize, y * gridSize, gridSize, gridSize);
+        }
+      }
+    });
+
+    // Tıklanınca piksel boyama
+    canvas.addEventListener('click', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = Math.floor((e.clientX - rect.left) / gridSize);
+      const y = Math.floor((e.clientY - rect.top) / gridSize);
+      const color = document.getElementById('colorPicker').value;
+
+      ctx.fillStyle = color;
+      ctx.fillRect(x * gridSize, y * gridSize, gridSize, gridSize);
+
+      const pixelKey = `${x}_${y}`;
+      set(ref(db, 'pixels/' + pixelKey), color);
+    });
+  </script>
+</body>
+</html>
