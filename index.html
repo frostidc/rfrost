@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
-  <meta charset="UTF-8">
-  <title>Rclose Pixel Place - Admin Sistemi</title>
+  <meta charset="UTF-8" />
+  <title>Rclose Pixel Place - Full Admin</title>
   <style>
     body { background: #111; color: white; text-align: center; font-family: sans-serif; }
-    canvas { border: 2px solid #fff; margin-top: 20px; image-rendering: pixelated; }
+    canvas { border: 2px solid #fff; margin-top: 20px; image-rendering: pixelated; cursor: crosshair; }
     #colorPicker { margin: 10px; }
     button, input[type="file"] {
       padding: 10px;
@@ -16,21 +16,18 @@
       border-radius: 5px;
       cursor: pointer;
     }
-    #adminPanel {
-      display: none;
-    }
   </style>
 </head>
 <body>
   <h1>🎨 Rclose Pixel Place</h1>
 
-  <input type="color" id="colorPicker" value="#ff0000">
+  <input type="color" id="colorPicker" value="#ff0000" />
   <canvas id="canvas" width="1000" height="1000"></canvas>
 
   <div id="adminPanel">
     <h3>👑 Admin Panel</h3>
-    <button id="clearBtn">🧹 Tuvali Temizle</button><br>
-    <input type="file" id="imageUpload" accept="image/*">
+    <button id="clearBtn">🧹 Tuvali Temizle</button><br />
+    <input type="file" id="imageUpload" accept="image/*" />
   </div>
 
   <script type="module">
@@ -50,14 +47,12 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
+
     const canvas = document.getElementById("canvas");
     const ctx = canvas.getContext("2d");
     const gridSize = 10;
-    const adminPanel = document.getElementById("adminPanel");
 
-    let isAdmin = false;
-    let pendingImageData = null;
-
+    // Firebase'den tüm pikselleri oku ve çiz
     const pixelRef = ref(db, 'pixels');
     onValue(pixelRef, (snapshot) => {
       const data = snapshot.val();
@@ -65,73 +60,45 @@
       if (data) {
         for (let key in data) {
           const [x, y] = key.split('_').map(Number);
-          const color = typeof data[key] === 'object' ? data[key].color : data[key];
-          ctx.fillStyle = color;
+          ctx.fillStyle = data[key];
           ctx.fillRect(x * gridSize, y * gridSize, gridSize, gridSize);
         }
       }
     });
 
+    // Normal kullanıcı için piksel boyama
     canvas.addEventListener("click", (e) => {
+      if (pendingImageData) {
+        // Eğer admin resim yerleştiriyorsa onu başlat
+        placeImageAtClick(e);
+      } else {
+        drawPixel(e);
+      }
+    });
+
+    function drawPixel(e) {
       const rect = canvas.getBoundingClientRect();
       const x = Math.floor((e.clientX - rect.left) / gridSize);
       const y = Math.floor((e.clientY - rect.top) / gridSize);
       const color = document.getElementById("colorPicker").value;
       const pixelKey = `${x}_${y}`;
-      const pixelPath = ref(db, 'pixels/' + pixelKey);
+      ctx.fillStyle = color;
+      ctx.fillRect(x * gridSize, y * gridSize, gridSize, gridSize);
+      set(ref(db, 'pixels/' + pixelKey), color);
+    }
 
-      if (isAdmin && pendingImageData) {
-        const { imageData, width, height } = pendingImageData;
-
-        for (let dy = 0; dy < height; dy++) {
-          for (let dx = 0; dx < width; dx++) {
-            const i = (dy * width + dx) * 4;
-            const r = imageData[i];
-            const g = imageData[i + 1];
-            const b = imageData[i + 2];
-            const a = imageData[i + 3];
-            if (a < 10) continue; // saydam pikseli atla
-
-            const hex = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-            const px = x + dx;
-            const py = y + dy;
-
-            if (px * gridSize < canvas.width && py * gridSize < canvas.height) {
-              ctx.fillStyle = hex;
-              ctx.fillRect(px * gridSize, py * gridSize, gridSize, gridSize);
-              set(ref(db, 'pixels/' + `${px}_${py}`), { color: hex, locked: true });
-            }
-          }
-        }
-
-        pendingImageData = null;
-        alert("✅ Resim başarıyla yerleştirildi.");
-        return;
-      }
-
-      onValue(pixelPath, (snapshot) => {
-        const data = snapshot.val();
-        if (data && data.locked && !isAdmin) {
-          ctx.fillStyle = color;
-          ctx.fillRect(x * gridSize, y * gridSize, gridSize, gridSize);
-          setTimeout(() => {
-            ctx.fillStyle = data.color;
-            ctx.fillRect(x * gridSize, y * gridSize, gridSize, gridSize);
-          }, 1000);
-        } else {
-          ctx.fillStyle = color;
-          ctx.fillRect(x * gridSize, y * gridSize, gridSize, gridSize);
-          set(pixelPath, isAdmin ? { color, locked: false } : { color });
-        }
-      }, { onlyOnce: true });
-    });
-
+    // Tuvali temizle butonu
     document.getElementById("clearBtn").onclick = () => {
-      if (confirm("Tüm tuvali silmek istiyor musun?")) {
-        remove(pixelRef);
+      if (confirm("Tuvali tamamen temizlemek istiyor musun?")) {
+        remove(ref(db, 'pixels'));
       }
     };
 
+    // Admin resim yerleştirmek için veriler burada tutulacak
+    let pendingImageData = null; // { imageData: Uint8ClampedArray, width: int, height: int }
+    let pendingImageDrawn = false;
+
+    // Resim yükleme ve ön hazırlık
     document.getElementById("imageUpload").addEventListener("change", (event) => {
       const file = event.target.files[0];
       if (!file) return;
@@ -140,40 +107,79 @@
       reader.onload = (e) => {
         const img = new Image();
         img.onload = () => {
-          const width = img.width;
-          const height = img.height;
+          const maxCellsX = Math.floor(canvas.width / gridSize);
+          const maxCellsY = Math.floor(canvas.height / gridSize);
+
+          let imgW = img.width;
+          let imgH = img.height;
+
+          // Eğer resim tuvalden büyükse orantılı küçült
+          if (imgW > maxCellsX || imgH > maxCellsY) {
+            const scale = Math.min(maxCellsX / imgW, maxCellsY / imgH);
+            imgW = Math.floor(imgW * scale);
+            imgH = Math.floor(imgH * scale);
+          }
 
           const tempCanvas = document.createElement("canvas");
-          tempCanvas.width = width;
-          tempCanvas.height = height;
+          tempCanvas.width = imgW;
+          tempCanvas.height = imgH;
           const tempCtx = tempCanvas.getContext("2d");
-          tempCtx.drawImage(img, 0, 0, width, height);
-          const imageData = tempCtx.getImageData(0, 0, width, height).data;
+          tempCtx.drawImage(img, 0, 0, imgW, imgH);
+          const imageData = tempCtx.getImageData(0, 0, imgW, imgH).data;
 
-          pendingImageData = { imageData, width, height };
-          alert(`🟡 Resim (${width}x${height}) yüklendi. Tuvalde başlangıç noktası seç.`);
+          pendingImageData = { imageData, width: imgW, height: imgH };
+          pendingImageDrawn = false;
+          alert(`🟡 Resim yüklendi (${imgW}x${imgH}). Tuvale tıklayarak çizime başla.`);
         };
         img.src = e.target.result;
       };
       reader.readAsDataURL(file);
     });
 
-    // Admin tuşları (f + r + o + s + t)
-    const pressedKeys = new Set();
-    const targetKeys = ['f', 'r', 'o', 's', 't'];
+    // Adminin tıkladığı yerden resim çizme fonksiyonu
+    function placeImageAtClick(e) {
+      if (!pendingImageData) return;
 
-    document.addEventListener("keydown", (e) => {
-      pressedKeys.add(e.key.toLowerCase());
-      if (targetKeys.every(k => pressedKeys.has(k))) {
-        isAdmin = true;
-        adminPanel.style.display = "block";
-        alert("✅ Admin panel aktif!");
+      const rect = canvas.getBoundingClientRect();
+      const startX = Math.floor((e.clientX - rect.left) / gridSize);
+      const startY = Math.floor((e.clientY - rect.top) / gridSize);
+
+      const { imageData, width, height } = pendingImageData;
+
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const idx = (y * width + x) * 4;
+          const r = imageData[idx];
+          const g = imageData[idx + 1];
+          const b = imageData[idx + 2];
+          const a = imageData[idx + 3];
+
+          // Eğer piksel şeffaf değilse çiz
+          if (a > 128) {
+            const hex = rgbToHex(r, g, b);
+            const pixelX = startX + x;
+            const pixelY = startY + y;
+
+            // Tuval sınırlarını aşma kontrolü
+            if (pixelX >= 0 && pixelX < canvas.width / gridSize &&
+                pixelY >= 0 && pixelY < canvas.height / gridSize) {
+
+              ctx.fillStyle = hex;
+              ctx.fillRect(pixelX * gridSize, pixelY * gridSize, gridSize, gridSize);
+              set(ref(db, 'pixels/' + pixelX + '_' + pixelY), hex);
+            }
+          }
+        }
       }
-    });
 
-    document.addEventListener("keyup", (e) => {
-      pressedKeys.delete(e.key.toLowerCase());
-    });
+      pendingImageData = null; // Resim çizimi tamamlandı, temizle
+      pendingImageDrawn = true;
+    }
+
+    // RGB'den HEX'e dönüştürme fonksiyonu
+    function rgbToHex(r, g, b) {
+      return "#" + [r, g, b].map(x => x.toString(16).padStart(2, "0")).join("");
+    }
   </script>
 </body>
 </html>
