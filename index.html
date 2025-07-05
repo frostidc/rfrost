@@ -57,47 +57,68 @@
     const gridSize = 10;
 
     const pixelRef = ref(db, 'pixels');
+    let pixelData = {}; // Güncel pixel renklerini tutar (Firebase'den gelen)
+
+    // Admin panel ve kullanıcı durumu
+    const adminPanel = document.getElementById('adminPanel');
+    let isAdmin = false;
+
+    // Firebase'deki pikselleri sürekli dinle ve güncelle
     onValue(pixelRef, (snapshot) => {
-      const data = snapshot.val();
+      const data = snapshot.val() || {};
+      pixelData = data;
+
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      if (data) {
-        for (let key in data) {
-          const [x, y] = key.split('_').map(Number);
-          ctx.fillStyle = data[key];
-          ctx.fillRect(x * gridSize, y * gridSize, gridSize, gridSize);
-        }
+      for (let key in data) {
+        const [x, y] = key.split('_').map(Number);
+        ctx.fillStyle = data[key];
+        ctx.fillRect(x * gridSize, y * gridSize, gridSize, gridSize);
       }
     });
 
+    // Kullanıcı tuvale tıklayınca
     canvas.addEventListener("click", (e) => {
-      if (pendingImageData) {
-        placeImageAtClick(e);
-      } else {
-        drawPixel(e);
-      }
-    });
-
-    function drawPixel(e) {
       const rect = canvas.getBoundingClientRect();
       const x = Math.floor((e.clientX - rect.left) / gridSize);
       const y = Math.floor((e.clientY - rect.top) / gridSize);
-      const color = document.getElementById("colorPicker").value;
       const pixelKey = `${x}_${y}`;
-      ctx.fillStyle = color;
-      ctx.fillRect(x * gridSize, y * gridSize, gridSize, gridSize);
-      set(ref(db, 'pixels/' + pixelKey), color);
-    }
+      const chosenColor = document.getElementById("colorPicker").value;
 
+      // Admin panel açık mı?
+      if (isAdmin) {
+        // Admin kalıcı olarak çizsin
+        ctx.fillStyle = chosenColor;
+        ctx.fillRect(x * gridSize, y * gridSize, gridSize, gridSize);
+        set(ref(db, 'pixels/' + pixelKey), chosenColor);
+      } else {
+        // Normal kullanıcı: önce çiz, sonra 1 saniye sonra eskiye dön
+        ctx.fillStyle = chosenColor;
+        ctx.fillRect(x * gridSize, y * gridSize, gridSize, gridSize);
+
+        // Firebase güncellenmez, çünkü kullanıcı değişikliği geçici
+        // 1 saniye sonra eski renk ile geri döndür
+        setTimeout(() => {
+          const oldColor = pixelData[pixelKey] || '#111111'; // Varsayılan siyah / tuval rengi
+          ctx.fillStyle = oldColor;
+          ctx.fillRect(x * gridSize, y * gridSize, gridSize, gridSize);
+        }, 1000);
+      }
+    });
+
+    // Tuvali temizle butonu
     document.getElementById("clearBtn").onclick = () => {
       if (confirm("Tuvali tamamen temizlemek istiyor musun?")) {
         remove(ref(db, 'pixels'));
       }
     };
 
+    // Resim yükleme ve çizme (admin için)
     let pendingImageData = null;
-    let pendingImageDrawn = false;
-
     document.getElementById("imageUpload").addEventListener("change", (event) => {
+      if (!isAdmin) {
+        alert("Resim yüklemek için admin olmalısınız!");
+        return;
+      }
       const file = event.target.files[0];
       if (!file) return;
 
@@ -125,7 +146,6 @@
           const imageData = tempCtx.getImageData(0, 0, imgW, imgH).data;
 
           pendingImageData = { imageData, width: imgW, height: imgH };
-          pendingImageDrawn = false;
           alert(`🟡 Resim yüklendi (${imgW}x${imgH}). Tuvale tıklayarak çizime başla.`);
         };
         img.src = e.target.result;
@@ -133,8 +153,10 @@
       reader.readAsDataURL(file);
     });
 
-    function placeImageAtClick(e) {
+    // Resmi yerleştirmek için tıklama işlemi
+    canvas.addEventListener("click", (e) => {
       if (!pendingImageData) return;
+      if (!isAdmin) return; // Sadece admin kullanabilir
 
       const rect = canvas.getBoundingClientRect();
       const startX = Math.floor((e.clientX - rect.left) / gridSize);
@@ -166,31 +188,28 @@
         }
       }
 
-      pendingImageData = null;
-      pendingImageDrawn = true;
-    }
+      pendingImageData = null; // Resim çizildi
+    });
 
     function rgbToHex(r, g, b) {
       return "#" + [r, g, b].map(x => x.toString(16).padStart(2, "0")).join("");
     }
 
-    // ------------------------
-    // Admin panel gizli açma kodu
+    // Admin panel gizli açma tuş dizisi
     const secretCode = ['a', 's', 'e'];
     let currentIndex = 0;
-    const adminPanel = document.getElementById('adminPanel');
 
     window.addEventListener('keydown', (e) => {
       if (e.key.toLowerCase() === secretCode[currentIndex]) {
         currentIndex++;
         if (currentIndex === secretCode.length) {
-          // Tüm kod doğru basıldı, admin paneli göster
           adminPanel.style.display = 'block';
+          isAdmin = true;
           alert('👑 Admin panel açıldı!');
           currentIndex = 0;
         }
       } else {
-        currentIndex = 0; // Yanlış basarsa sıfırla
+        currentIndex = 0;
       }
     });
   </script>
