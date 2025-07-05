@@ -1,217 +1,315 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
-  <meta charset="UTF-8" />
-  <title>Rclose Pixel Place - Full Admin</title>
-  <style>
-    body { background: #111; color: white; text-align: center; font-family: sans-serif; }
-    canvas { border: 2px solid #fff; margin-top: 20px; image-rendering: pixelated; cursor: crosshair; }
-    #colorPicker { margin: 10px; }
-    button, input[type="file"] {
-      padding: 10px;
-      margin: 5px;
-      background: #333;
-      color: white;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-    }
-    #adminPanel {
-      display: none; /* Başlangıçta gizli */
-      margin-top: 20px;
-    }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Uçan Kuş - Firebase Skor</title>
+<style>
+  body {
+    margin: 0; font-family: Arial, sans-serif; background: #222; color: white;
+    display: flex; flex-direction: column; align-items: center; min-height: 100vh; overflow: hidden;
+  }
+  #gameCanvas {
+    background: #70c5ce;
+    margin-top: 20px;
+    border-radius: 10px;
+    border: 3px solid #000;
+  }
+  #leaderboard {
+    margin-top: 10px;
+    width: 320px;
+    background: #333;
+    padding: 10px;
+    border-radius: 10px;
+    max-height: 230px;
+    overflow-y: auto;
+  }
+  #themeToggle {
+    position: fixed;
+    top: 10px; left: 10px;
+    padding: 8px 14px;
+    border: none;
+    border-radius: 5px;
+    background: #444;
+    color: white;
+    cursor: pointer;
+    font-weight: bold;
+    z-index: 1000;
+  }
+  #playerNameModal {
+    position: fixed;
+    top:0; left:0; right:0; bottom:0;
+    background: rgba(0,0,0,0.85);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;
+  }
+  #playerNameModalContent {
+    background: #111;
+    padding: 25px 35px;
+    border-radius: 12px;
+    text-align: center;
+    width: 90%;
+    max-width: 400px;
+  }
+  #playerNameModalContent input {
+    width: 80%;
+    padding: 12px;
+    font-size: 16px;
+    border-radius: 8px;
+    border: none;
+    margin-top: 15px;
+  }
+  #playerNameModalContent button {
+    margin-top: 22px;
+    padding: 12px 28px;
+    font-size: 17px;
+    border-radius: 8px;
+    border: none;
+    background: #2196f3;
+    color: white;
+    cursor: pointer;
+    font-weight: bold;
+  }
+</style>
 </head>
 <body>
-  <h1>🎨 Rclose Pixel Place</h1>
+<button id="themeToggle">Beyaz Tema</button>
+<canvas id="gameCanvas" width="400" height="600"></canvas>
+<div id="leaderboard">
+  <h3 style="margin-top:0;">Liderlik Tablosu</h3>
+  <ul id="scoresList" style="list-style:none; padding-left:10px;"></ul>
+</div>
 
-  <input type="color" id="colorPicker" value="#ff0000" />
-  <canvas id="canvas" width="1000" height="1000"></canvas>
-
-  <div id="adminPanel">
-    <h3>👑 Admin Panel</h3>
-    <button id="clearBtn">🧹 Tuvali Temizle</button><br />
-    <input type="file" id="imageUpload" accept="image/*" />
+<!-- İsim modal -->
+<div id="playerNameModal" style="display:none;">
+  <div id="playerNameModalContent">
+    <h2>İsminizi Girin</h2>
+    <input type="text" id="playerNameInput" placeholder="İsminiz..." />
+    <br />
+    <button id="saveNameBtn">Oyuna Başla</button>
   </div>
+</div>
 
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getDatabase, ref, set, onValue, remove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+<script type="module">
+// Firebase modülleri import
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
+import { getFirestore, collection, addDoc, query, orderBy, limit, getDocs, Timestamp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
 
-    const firebaseConfig = {
-      apiKey: "AIzaSyDAJGgwGdI6ZgWaGkZfIT9WRcbBqHLUXWY",
-      authDomain: "rclose-25d84.firebaseapp.com",
-      projectId: "rclose-25d84",
-      storageBucket: "rclose-25d84.firebasestorage.app",
-      messagingSenderId: "697784540299",
-      appId: "1:697784540299:web:a8425786862a02459a088e",
-      measurementId: "G-ELTFR1KTWP",
-      databaseURL: "https://rclose-25d84-default-rtdb.firebaseio.com"
-    };
+// Firebase konfigürasyonun (kendi projenle değiştir!)
+const firebaseConfig = {
+  apiKey: "AIzaSyBdaamFfj50Fg-XL47q5z4jmyDlGdW_alg",
+  authDomain: "ngame-f48c4.firebaseapp.com",
+  databaseURL: "https://ngame-f48c4-default-rtdb.firebaseio.com",
+  projectId: "ngame-f48c4",
+  storageBucket: "ngame-f48c4.appspot.com",
+  messagingSenderId: "138981202469",
+  appId: "1:138981202469:web:b03a93947a7b4ba0b87dcc",
+  measurementId: "G-3KEK8ZV4J7"
+};
 
-    const app = initializeApp(firebaseConfig);
-    const db = getDatabase(app);
+// Firebase başlat
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
 
-    const canvas = document.getElementById("canvas");
-    const ctx = canvas.getContext("2d");
-    const gridSize = 10;
+// DOM elemanları
+const themeToggle = document.getElementById('themeToggle');
+const playerNameModal = document.getElementById('playerNameModal');
+const playerNameInput = document.getElementById('playerNameInput');
+const saveNameBtn = document.getElementById('saveNameBtn');
+const scoresList = document.getElementById('scoresList');
 
-    const pixelRef = ref(db, 'pixels');
-    let pixelData = {}; // Güncel pixel renklerini tutar (Firebase'den gelen)
+let playerName = localStorage.getItem('playerName');
+let darkTheme = true;
 
-    // Admin panel ve kullanıcı durumu
-    const adminPanel = document.getElementById('adminPanel');
-    let isAdmin = false;
+function updateTheme() {
+  if(darkTheme){
+    document.body.style.background = '#222';
+    document.body.style.color = 'white';
+    themeToggle.textContent = 'Beyaz Tema';
+  } else {
+    document.body.style.background = 'white';
+    document.body.style.color = 'black';
+    themeToggle.textContent = 'Koyu Tema';
+  }
+}
+themeToggle.onclick = () => {
+  darkTheme = !darkTheme;
+  updateTheme();
+};
+updateTheme();
 
-    // Firebase'deki pikselleri sürekli dinle ve güncelle
-    onValue(pixelRef, (snapshot) => {
-      const data = snapshot.val() || {};
-      pixelData = data;
+if(!playerName){
+  playerNameModal.style.display = 'flex';
+} else {
+  startGame();
+}
 
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      for (let key in data) {
-        const [x, y] = key.split('_').map(Number);
-        ctx.fillStyle = data[key];
-        ctx.fillRect(x * gridSize, y * gridSize, gridSize, gridSize);
-      }
+saveNameBtn.onclick = () => {
+  const val = playerNameInput.value.trim();
+  if(val.length < 1){
+    alert('İsim boş olamaz!');
+    return;
+  }
+  playerName = val;
+  localStorage.setItem('playerName', playerName);
+  playerNameModal.style.display = 'none';
+  startGame();
+};
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+let bird = { x: 50, y: 250, w: 40, h: 30, vy: 0 };
+const gravity = 0.6;
+const lift = -12;
+let pipes = [];
+const pipeWidth = 60;
+const pipeGap = 140;
+let frameCount = 0;
+let score = 0;
+let gameOver = false;
+
+// Oyun başlat
+function startGame(){
+  bird.y = 250;
+  bird.vy = 0;
+  pipes = [];
+  frameCount = 0;
+  score = 0;
+  gameOver = false;
+  loadScores();
+  loop();
+}
+
+function loop(){
+  if(gameOver) return;
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+function update(){
+  frameCount++;
+  bird.vy += gravity;
+  bird.y += bird.vy;
+
+  if(bird.y + bird.h > canvas.height || bird.y < 0){
+    finishGame();
+    return;
+  }
+
+  if(frameCount % 90 === 0){
+    const pipeTopHeight = Math.floor(Math.random() * (canvas.height - pipeGap - 100)) + 50;
+    pipes.push({
+      x: canvas.width,
+      topHeight: pipeTopHeight,
+      bottomY: pipeTopHeight + pipeGap,
+      bottomHeight: canvas.height - (pipeTopHeight + pipeGap)
     });
+  }
 
-    // Kullanıcı tuvale tıklayınca
-    canvas.addEventListener("click", (e) => {
-      const rect = canvas.getBoundingClientRect();
-      const x = Math.floor((e.clientX - rect.left) / gridSize);
-      const y = Math.floor((e.clientY - rect.top) / gridSize);
-      const pixelKey = `${x}_${y}`;
-      const chosenColor = document.getElementById("colorPicker").value;
+  pipes.forEach(pipe => {
+    pipe.x -= 3;
+  });
 
-      // Admin panel açık mı?
-      if (isAdmin) {
-        // Admin kalıcı olarak çizsin
-        ctx.fillStyle = chosenColor;
-        ctx.fillRect(x * gridSize, y * gridSize, gridSize, gridSize);
-        set(ref(db, 'pixels/' + pixelKey), chosenColor);
-      } else {
-        // Normal kullanıcı: önce çiz, sonra 1 saniye sonra eskiye dön
-        ctx.fillStyle = chosenColor;
-        ctx.fillRect(x * gridSize, y * gridSize, gridSize, gridSize);
+  // Boruların temizlenmesi
+  pipes = pipes.filter(pipe => pipe.x + pipeWidth > 0);
 
-        // Firebase güncellenmez, çünkü kullanıcı değişikliği geçici
-        // 1 saniye sonra eski renk ile geri döndür
-        setTimeout(() => {
-          const oldColor = pixelData[pixelKey] || '#111111'; // Varsayılan siyah / tuval rengi
-          ctx.fillStyle = oldColor;
-          ctx.fillRect(x * gridSize, y * gridSize, gridSize, gridSize);
-        }, 1000);
-      }
-    });
-
-    // Tuvali temizle butonu
-    document.getElementById("clearBtn").onclick = () => {
-      if (confirm("Tuvali tamamen temizlemek istiyor musun?")) {
-        remove(ref(db, 'pixels'));
-      }
-    };
-
-    // Resim yükleme ve çizme (admin için)
-    let pendingImageData = null;
-    document.getElementById("imageUpload").addEventListener("change", (event) => {
-      if (!isAdmin) {
-        alert("Resim yüklemek için admin olmalısınız!");
-        return;
-      }
-      const file = event.target.files[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const img = new Image();
-        img.onload = () => {
-          const maxCellsX = Math.floor(canvas.width / gridSize);
-          const maxCellsY = Math.floor(canvas.height / gridSize);
-
-          let imgW = img.width;
-          let imgH = img.height;
-
-          if (imgW > maxCellsX || imgH > maxCellsY) {
-            const scale = Math.min(maxCellsX / imgW, maxCellsY / imgH);
-            imgW = Math.floor(imgW * scale);
-            imgH = Math.floor(imgH * scale);
-          }
-
-          const tempCanvas = document.createElement("canvas");
-          tempCanvas.width = imgW;
-          tempCanvas.height = imgH;
-          const tempCtx = tempCanvas.getContext("2d");
-          tempCtx.drawImage(img, 0, 0, imgW, imgH);
-          const imageData = tempCtx.getImageData(0, 0, imgW, imgH).data;
-
-          pendingImageData = { imageData, width: imgW, height: imgH };
-          alert(`🟡 Resim yüklendi (${imgW}x${imgH}). Tuvale tıklayarak çizime başla.`);
-        };
-        img.src = e.target.result;
-      };
-      reader.readAsDataURL(file);
-    });
-
-    // Resmi yerleştirmek için tıklama işlemi
-    canvas.addEventListener("click", (e) => {
-      if (!pendingImageData) return;
-      if (!isAdmin) return; // Sadece admin kullanabilir
-
-      const rect = canvas.getBoundingClientRect();
-      const startX = Math.floor((e.clientX - rect.left) / gridSize);
-      const startY = Math.floor((e.clientY - rect.top) / gridSize);
-
-      const { imageData, width, height } = pendingImageData;
-
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          const idx = (y * width + x) * 4;
-          const r = imageData[idx];
-          const g = imageData[idx + 1];
-          const b = imageData[idx + 2];
-          const a = imageData[idx + 3];
-
-          if (a > 128) {
-            const hex = rgbToHex(r, g, b);
-            const pixelX = startX + x;
-            const pixelY = startY + y;
-
-            if (pixelX >= 0 && pixelX < canvas.width / gridSize &&
-                pixelY >= 0 && pixelY < canvas.height / gridSize) {
-
-              ctx.fillStyle = hex;
-              ctx.fillRect(pixelX * gridSize, pixelY * gridSize, gridSize, gridSize);
-              set(ref(db, 'pixels/' + pixelX + '_' + pixelY), hex);
-            }
-          }
-        }
-      }
-
-      pendingImageData = null; // Resim çizildi
-    });
-
-    function rgbToHex(r, g, b) {
-      return "#" + [r, g, b].map(x => x.toString(16).padStart(2, "0")).join("");
+  // Skor arttırma ve çarpma kontrolü
+  pipes.forEach(pipe => {
+    if(!pipe.passed && pipe.x + pipeWidth < bird.x){
+      score++;
+      pipe.passed = true;
     }
 
-    // Admin panel gizli açma tuş dizisi
-    const secretCode = ['a', 's', 'e'];
-    let currentIndex = 0;
+    if(
+      bird.x + bird.w > pipe.x &&
+      bird.x < pipe.x + pipeWidth &&
+      (bird.y < pipe.topHeight || bird.y + bird.h > pipe.bottomY)
+    ){
+      finishGame();
+    }
+  });
+}
 
-    window.addEventListener('keydown', (e) => {
-      if (e.key.toLowerCase() === secretCode[currentIndex]) {
-        currentIndex++;
-        if (currentIndex === secretCode.length) {
-          adminPanel.style.display = 'block';
-          isAdmin = true;
-          alert('👑 Admin panel açıldı!');
-          currentIndex = 0;
-        }
-      } else {
-        currentIndex = 0;
-      }
+function draw(){
+  ctx.fillStyle = darkTheme ? '#70c5ce' : '#a2d5f2';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  // Kuş
+  ctx.fillStyle = 'yellow';
+  ctx.fillRect(bird.x,bird.y,bird.w,bird.h);
+
+  // Borular
+  ctx.fillStyle = 'green';
+  pipes.forEach(pipe => {
+    ctx.fillRect(pipe.x, 0, pipeWidth, pipe.topHeight);
+    ctx.fillRect(pipe.x, pipe.bottomY, pipeWidth, pipe.bottomHeight);
+  });
+
+  // Skor ve isim
+  ctx.fillStyle = darkTheme ? 'white' : 'black';
+  ctx.font = '24px Arial';
+  ctx.fillText(`Skor: ${score}`, 10, 30);
+  ctx.fillText(`Oyuncu: ${playerName}`, 10, 60);
+}
+
+// Kuşu uçur
+window.addEventListener('keydown', e => {
+  if(e.code === "Space"){
+    bird.vy = lift;
+  }
+});
+window.addEventListener('mousedown', () => {
+  bird.vy = lift;
+});
+
+// Oyunu bitir
+async function finishGame(){
+  gameOver = true;
+  alert(`Oyun bitti! Skorun: ${score}`);
+  await saveScore(playerName, score);
+  await loadScores();
+}
+
+// Firestore'a skor kaydet
+async function saveScore(name, score){
+  try {
+    const docRef = await addDoc(collection(db, "scores"), {
+      name: name,
+      score: score,
+      timestamp: Timestamp.now()
     });
-  </script>
+    console.log("Skor kaydedildi:", docRef.id);
+  } catch (e) {
+    console.error("Skor kaydedilemedi:", e);
+  }
+}
+
+// En iyi skorları getir ve listele
+async function loadScores(){
+  scoresList.innerHTML = '<li>Yükleniyor...</li>';
+  try {
+    const q = query(collection(db, "scores"), orderBy("score", "desc"), limit(10));
+    const querySnapshot = await getDocs(q);
+    scoresList.innerHTML = '';
+    if(querySnapshot.empty){
+      scoresList.innerHTML = '<li>Henüz skor yok</li>';
+      return;
+    }
+    querySnapshot.forEach(doc => {
+      const data = doc.data();
+      const li = document.createElement('li');
+      li.textContent = `${data.name}: ${data.score}`;
+      scoresList.appendChild(li);
+    });
+  } catch (e) {
+    scoresList.innerHTML = '<li>Skorlar yüklenemedi.</li>';
+    console.error(e);
+  }
+}
+</script>
 </body>
 </html>
