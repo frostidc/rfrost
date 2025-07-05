@@ -1,1 +1,217 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Rclose Pixel Place - Full Admin</title>
+  <style>
+    body { background: #111; color: white; text-align: center; font-family: sans-serif; }
+    canvas { border: 2px solid #fff; margin-top: 20px; image-rendering: pixelated; cursor: crosshair; }
+    #colorPicker { margin: 10px; }
+    button, input[type="file"] {
+      padding: 10px;
+      margin: 5px;
+      background: #333;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    #adminPanel {
+      display: none; /* Başlangıçta gizli */
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎨 Rclose Pixel Place</h1>
 
+  <input type="color" id="colorPicker" value="#ff0000" />
+  <canvas id="canvas" width="1000" height="1000"></canvas>
+
+  <div id="adminPanel">
+    <h3>👑 Admin Panel</h3>
+    <button id="clearBtn">🧹 Tuvali Temizle</button><br />
+    <input type="file" id="imageUpload" accept="image/*" />
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getDatabase, ref, set, onValue, remove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDAJGgwGdI6ZgWaGkZfIT9WRcbBqHLUXWY",
+      authDomain: "rclose-25d84.firebaseapp.com",
+      projectId: "rclose-25d84",
+      storageBucket: "rclose-25d84.firebasestorage.app",
+      messagingSenderId: "697784540299",
+      appId: "1:697784540299:web:a8425786862a02459a088e",
+      measurementId: "G-ELTFR1KTWP",
+      databaseURL: "https://rclose-25d84-default-rtdb.firebaseio.com"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+    const gridSize = 10;
+
+    const pixelRef = ref(db, 'pixels');
+    let pixelData = {}; // Güncel pixel renklerini tutar (Firebase'den gelen)
+
+    // Admin panel ve kullanıcı durumu
+    const adminPanel = document.getElementById('adminPanel');
+    let isAdmin = false;
+
+    // Firebase'deki pikselleri sürekli dinle ve güncelle
+    onValue(pixelRef, (snapshot) => {
+      const data = snapshot.val() || {};
+      pixelData = data;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (let key in data) {
+        const [x, y] = key.split('_').map(Number);
+        ctx.fillStyle = data[key];
+        ctx.fillRect(x * gridSize, y * gridSize, gridSize, gridSize);
+      }
+    });
+
+    // Kullanıcı tuvale tıklayınca
+    canvas.addEventListener("click", (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = Math.floor((e.clientX - rect.left) / gridSize);
+      const y = Math.floor((e.clientY - rect.top) / gridSize);
+      const pixelKey = `${x}_${y}`;
+      const chosenColor = document.getElementById("colorPicker").value;
+
+      // Admin panel açık mı?
+      if (isAdmin) {
+        // Admin kalıcı olarak çizsin
+        ctx.fillStyle = chosenColor;
+        ctx.fillRect(x * gridSize, y * gridSize, gridSize, gridSize);
+        set(ref(db, 'pixels/' + pixelKey), chosenColor);
+      } else {
+        // Normal kullanıcı: önce çiz, sonra 1 saniye sonra eskiye dön
+        ctx.fillStyle = chosenColor;
+        ctx.fillRect(x * gridSize, y * gridSize, gridSize, gridSize);
+
+        // Firebase güncellenmez, çünkü kullanıcı değişikliği geçici
+        // 1 saniye sonra eski renk ile geri döndür
+        setTimeout(() => {
+          const oldColor = pixelData[pixelKey] || '#111111'; // Varsayılan siyah / tuval rengi
+          ctx.fillStyle = oldColor;
+          ctx.fillRect(x * gridSize, y * gridSize, gridSize, gridSize);
+        }, 1000);
+      }
+    });
+
+    // Tuvali temizle butonu
+    document.getElementById("clearBtn").onclick = () => {
+      if (confirm("Tuvali tamamen temizlemek istiyor musun?")) {
+        remove(ref(db, 'pixels'));
+      }
+    };
+
+    // Resim yükleme ve çizme (admin için)
+    let pendingImageData = null;
+    document.getElementById("imageUpload").addEventListener("change", (event) => {
+      if (!isAdmin) {
+        alert("Resim yüklemek için admin olmalısınız!");
+        return;
+      }
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const maxCellsX = Math.floor(canvas.width / gridSize);
+          const maxCellsY = Math.floor(canvas.height / gridSize);
+
+          let imgW = img.width;
+          let imgH = img.height;
+
+          if (imgW > maxCellsX || imgH > maxCellsY) {
+            const scale = Math.min(maxCellsX / imgW, maxCellsY / imgH);
+            imgW = Math.floor(imgW * scale);
+            imgH = Math.floor(imgH * scale);
+          }
+
+          const tempCanvas = document.createElement("canvas");
+          tempCanvas.width = imgW;
+          tempCanvas.height = imgH;
+          const tempCtx = tempCanvas.getContext("2d");
+          tempCtx.drawImage(img, 0, 0, imgW, imgH);
+          const imageData = tempCtx.getImageData(0, 0, imgW, imgH).data;
+
+          pendingImageData = { imageData, width: imgW, height: imgH };
+          alert(`🟡 Resim yüklendi (${imgW}x${imgH}). Tuvale tıklayarak çizime başla.`);
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // Resmi yerleştirmek için tıklama işlemi
+    canvas.addEventListener("click", (e) => {
+      if (!pendingImageData) return;
+      if (!isAdmin) return; // Sadece admin kullanabilir
+
+      const rect = canvas.getBoundingClientRect();
+      const startX = Math.floor((e.clientX - rect.left) / gridSize);
+      const startY = Math.floor((e.clientY - rect.top) / gridSize);
+
+      const { imageData, width, height } = pendingImageData;
+
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const idx = (y * width + x) * 4;
+          const r = imageData[idx];
+          const g = imageData[idx + 1];
+          const b = imageData[idx + 2];
+          const a = imageData[idx + 3];
+
+          if (a > 128) {
+            const hex = rgbToHex(r, g, b);
+            const pixelX = startX + x;
+            const pixelY = startY + y;
+
+            if (pixelX >= 0 && pixelX < canvas.width / gridSize &&
+                pixelY >= 0 && pixelY < canvas.height / gridSize) {
+
+              ctx.fillStyle = hex;
+              ctx.fillRect(pixelX * gridSize, pixelY * gridSize, gridSize, gridSize);
+              set(ref(db, 'pixels/' + pixelX + '_' + pixelY), hex);
+            }
+          }
+        }
+      }
+
+      pendingImageData = null; // Resim çizildi
+    });
+
+    function rgbToHex(r, g, b) {
+      return "#" + [r, g, b].map(x => x.toString(16).padStart(2, "0")).join("");
+    }
+
+    // Admin panel gizli açma tuş dizisi
+    const secretCode = ['a', 's', 'e'];
+    let currentIndex = 0;
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key.toLowerCase() === secretCode[currentIndex]) {
+        currentIndex++;
+        if (currentIndex === secretCode.length) {
+          adminPanel.style.display = 'block';
+          isAdmin = true;
+          alert('👑 Admin panel açıldı!');
+          currentIndex = 0;
+        }
+      } else {
+        currentIndex = 0;
+      }
+    });
+  </script>
+</body>
+</html>
