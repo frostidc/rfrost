@@ -16,6 +16,10 @@
       border-radius: 5px;
       cursor: pointer;
     }
+    #adminPanel {
+      display: none; /* Başlangıçta gizli */
+      margin-top: 20px;
+    }
   </style>
 </head>
 <body>
@@ -52,7 +56,6 @@
     const ctx = canvas.getContext("2d");
     const gridSize = 10;
 
-    // Firebase'den tüm pikselleri oku ve çiz
     const pixelRef = ref(db, 'pixels');
     onValue(pixelRef, (snapshot) => {
       const data = snapshot.val();
@@ -66,10 +69,8 @@
       }
     });
 
-    // Normal kullanıcı için piksel boyama
     canvas.addEventListener("click", (e) => {
       if (pendingImageData) {
-        // Eğer admin resim yerleştiriyorsa onu başlat
         placeImageAtClick(e);
       } else {
         drawPixel(e);
@@ -87,18 +88,15 @@
       set(ref(db, 'pixels/' + pixelKey), color);
     }
 
-    // Tuvali temizle butonu
     document.getElementById("clearBtn").onclick = () => {
       if (confirm("Tuvali tamamen temizlemek istiyor musun?")) {
         remove(ref(db, 'pixels'));
       }
     };
 
-    // Admin resim yerleştirmek için veriler burada tutulacak
-    let pendingImageData = null; // { imageData: Uint8ClampedArray, width: int, height: int }
+    let pendingImageData = null;
     let pendingImageDrawn = false;
 
-    // Resim yükleme ve ön hazırlık
     document.getElementById("imageUpload").addEventListener("change", (event) => {
       const file = event.target.files[0];
       if (!file) return;
@@ -113,7 +111,6 @@
           let imgW = img.width;
           let imgH = img.height;
 
-          // Eğer resim tuvalden büyükse orantılı küçült
           if (imgW > maxCellsX || imgH > maxCellsY) {
             const scale = Math.min(maxCellsX / imgW, maxCellsY / imgH);
             imgW = Math.floor(imgW * scale);
@@ -136,7 +133,6 @@
       reader.readAsDataURL(file);
     });
 
-    // Adminin tıkladığı yerden resim çizme fonksiyonu
     function placeImageAtClick(e) {
       if (!pendingImageData) return;
 
@@ -154,13 +150,11 @@
           const b = imageData[idx + 2];
           const a = imageData[idx + 3];
 
-          // Eğer piksel şeffaf değilse çiz
           if (a > 128) {
             const hex = rgbToHex(r, g, b);
             const pixelX = startX + x;
             const pixelY = startY + y;
 
-            // Tuval sınırlarını aşma kontrolü
             if (pixelX >= 0 && pixelX < canvas.width / gridSize &&
                 pixelY >= 0 && pixelY < canvas.height / gridSize) {
 
@@ -172,14 +166,33 @@
         }
       }
 
-      pendingImageData = null; // Resim çizimi tamamlandı, temizle
+      pendingImageData = null;
       pendingImageDrawn = true;
     }
 
-    // RGB'den HEX'e dönüştürme fonksiyonu
     function rgbToHex(r, g, b) {
       return "#" + [r, g, b].map(x => x.toString(16).padStart(2, "0")).join("");
     }
+
+    // ------------------------
+    // Admin panel gizli açma kodu
+    const secretCode = ['a', 's', 'e'];
+    let currentIndex = 0;
+    const adminPanel = document.getElementById('adminPanel');
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key.toLowerCase() === secretCode[currentIndex]) {
+        currentIndex++;
+        if (currentIndex === secretCode.length) {
+          // Tüm kod doğru basıldı, admin paneli göster
+          adminPanel.style.display = 'block';
+          alert('👑 Admin panel açıldı!');
+          currentIndex = 0;
+        }
+      } else {
+        currentIndex = 0; // Yanlış basarsa sıfırla
+      }
+    });
   </script>
 </body>
 </html>
